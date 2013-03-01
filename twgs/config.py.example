@@ -1,0 +1,21 @@
+import os
+
+class C(dict):
+    """ Make config clean. """
+    def __init__(self, *arg, **kwargs):
+        super(C, self).__init__(*arg, **kwargs)
+        self.__dict__ = self
+
+home = os.path.join(os.environ['HOME'], '.twgs')
+
+providers = C({
+    'taskwarrior':C({
+        'config':os.path.join(os.environ['HOME'], '.task')
+    }),
+
+    'google':C({
+        'credential_storage':os.path.join(home, 'google.oauth'),
+        'client_id':'###',
+        'client_secret':'###'
+    })
+})
