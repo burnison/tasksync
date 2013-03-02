@@ -1,19 +1,40 @@
+# Copyright (C) 2012 Richard Burnison
+#
+# This file is part of tasksync.
+#
+# tasksync is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# tasksync is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with tasksync.  If not, see <http://www.gnu.org/licenses/>.
+
 """ Realization of TaskWarrior tasks. """
 import taskw
-import twgs
+import tasksync
 
 from datetime import datetime
 from twiggy import log
 
-class TaskWarriorTask(twgs.Task, twgs.DownstreamTask):
+class TaskWarriorTask(tasksync.Task, tasksync.DownstreamTask):
     """ Represents a TaskWarrior task. """
-    __UDA_NAMESPACE = "twgs"
+    __UDA_NAMESPACE = "tasksync"
     __UDA_ASSOCIATION = "%s_assoc" % __UDA_NAMESPACE
     __UDA_ETAG = "%s_etag" % __UDA_NAMESPACE
 
     def __init__(self, source):
         super(TaskWarriorTask, self).__init__()
         self._source = source
+
+    def __str__(self):
+        return "%s[id=%s,p=%s,s=%s]" % (
+                'TaskWarriorTask', self.uid, self.project, self.subject)
 
     def stale(self, other):
         """ Identifies if this task is stale from upstream. """
@@ -25,11 +46,13 @@ class TaskWarriorTask(twgs.Task, twgs.DownstreamTask):
     def copy_from(self, other):
         if other is None:
             raise ValueError("Cannot sync with nothing.")
+
+        self.__set_or_delete('project', getattr(other, 'project', None))
+        self.__set_or_delete('description', other.subject)
+
         dfmt = self.__format_date # Format callback.
-        self._set_or_delete('project', other.project)
-        self._set_or_delete('description', other.subject)
-        self._set_or_delete('due', other.due, fmt=dfmt)
-        self._set_or_delete('end', other.completed, fmt=dfmt)
+        self.__set_or_delete('due', other.due, fmt=dfmt)
+        self.__set_or_delete('end', other.completed, fmt=dfmt)
 
     @property
     def should_sync(self):
@@ -110,7 +133,16 @@ class TaskWarriorTask(twgs.Task, twgs.DownstreamTask):
     def __format_date(self, as_timestamp):
         return datetime.strftime(as_timestamp, '%s')
 
-class TaskWarriorTaskFactory(twgs.TaskFactory):
+    def __set_or_delete(self, key, value, fmt=None):
+        if value is None:
+            if key in self._source:
+                del self._source[key]
+        else:
+            if not fmt is None:
+                value = fmt(value)
+            self._source[key] = value
+
+class TaskWarriorTaskFactory(tasksync.TaskFactory):
     def create_from(self, **kwargs):
         """ Create a new task from another task, 'other', or a map, 'map'. """
         if 'map' in kwargs:
@@ -123,7 +155,7 @@ class TaskWarriorTaskFactory(twgs.TaskFactory):
 
         raise KeyError('Either a map or task argument must be provided.')
 
-class TaskWarriorTaskRepository(twgs.TaskRepository):
+class TaskWarriorTaskRepository(tasksync.TaskRepository):
     def __init__(self, factory, db=None, **kwargs):
         self._db = db or taskw.TaskWarrior(config_filename=kwargs['config'])
         self._factory = factory

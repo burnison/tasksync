@@ -1,15 +1,15 @@
 from setuptools import setup, find_packages
 
 setup(
-        name='twgs',
+        name='tasksync',
         version='1.0.0',
-        description='Syncs TaskWarrior and Google Tasks.',
+        description='Syncs task repositories.',
 
         author='Richard Burnison',
         author_email='richard@burnison.ca',
         url='http://www.burnison.ca/',
 
-        packages=['twgs'],
+        packages=['tasksync'],
         test_suite='nose.collector',
 
         install_requires=[

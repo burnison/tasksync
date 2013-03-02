@@ -1,3 +1,20 @@
+# Copyright (C) 2012 Richard Burnison
+#
+# This file is part of tasksync.
+#
+# tasksync is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# tasksync is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with tasksync.  If not, see <http://www.gnu.org/licenses/>.
+
 """ Tasks. """
 import abc
 
@@ -48,9 +65,8 @@ class Task(object):
     """ An abstract task representation. """
 
     def __str__(self):
-        return '%s[id=%s,p=%s,s=%s]' % (
-                self.__class__.__name__, self.uid,
-                self.project, self.subject)
+        return "%s[id=%s,s=%s]" % (
+                self.__class__.__name__, self.uid, self.subject)
 
     @abc.abstractproperty
     def uid(self):
@@ -63,11 +79,6 @@ class Task(object):
     @abc.abstractproperty
     def status(self):
         """ Return this task's status. """
-        raise NotImplementedError
-
-    @abc.abstractproperty
-    def project(self):
-        """ Return this task's project name. """
         raise NotImplementedError
 
     @abc.abstractproperty
@@ -117,18 +128,8 @@ class Task(object):
             return False
 
         return (self.subject == other.subject
-            and self.project == other.project
             and self.due == other.due
             and self.completed == other.completed)
-
-    def _set_or_delete(self, key, value, fmt=None):
-        if value is None:
-            if key in self._source:
-                del self._source[key]
-        else:
-            if not fmt is None:
-                value = fmt(value)
-            self._source[key] = value
 
 class TaskFactory(object):
     def create_from(self, **kwargs):

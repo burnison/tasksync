@@ -1,6 +1,23 @@
+# Copyright (C) 2012 Richard Burnison
+#
+# This file is part of tasksync.
+#
+# tasksync is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# tasksync is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with tasksync.  If not, see <http://www.gnu.org/licenses/>.
+
 #pylint: disable=C0103,C0111,I0011,I0012,W0704,W0142,W0212,W0232,W0613,W0702
 #pylint: disable=R0201,W0614,R0914,R0912,R0915,R0913,R0904,R0801,W0201,R0902
-import twgs
+import tasksync
 
 from mocks import MockUpstreamTask
 from mockito import mock, when, verify, any
@@ -12,7 +29,7 @@ TASK_2 = {"status":"completed", "description":"b", "project":"test"}
 
 class TestTaskWarriorTask(object):
     def setup(self):
-        self.factory = twgs.TaskWarriorTaskFactory()
+        self.factory = tasksync.TaskWarriorTaskFactory()
 
     # TODO: Need some kind of state transition methods.
     def test_status_mapping(self):
@@ -31,7 +48,7 @@ class TestTaskWarriorTask(object):
 
 class TestTaskWarriorTaskFactory(object):
     def setup(self):
-        self.factory = twgs.TaskWarriorTaskFactory()
+        self.factory = tasksync.TaskWarriorTaskFactory()
 
     def test_create_from_map(self):
         task = self.factory.create_from(map=TASK_1, project='test')
@@ -52,8 +69,8 @@ class TestTaskWarriorTaskFactory(object):
         upstream = MockUpstreamTask(provider='p', uid='u')
         task = self.factory.create_from(other=upstream)
         task.associate_with(upstream)
-        ok_('twgs_assoc_p' in task._source)
-        ok_('twgs_etag' in task._source)
+        ok_('tasksync_assoc_p' in task._source)
+        ok_('tasksync_etag' in task._source)
         eq_(task.association, 'u')
 
     @raises(KeyError)
@@ -64,8 +81,8 @@ class TestTaskWarriorTaskFactory(object):
 class TestTaskWarriorTaskRepository(object):
     def setup(self):
         self.db = mock()
-        self.factory = twgs.TaskWarriorTaskFactory()
-        self.repository = twgs.TaskWarriorTaskRepository(
+        self.factory = tasksync.TaskWarriorTaskFactory()
+        self.repository = tasksync.TaskWarriorTaskRepository(
                 self.factory, db=self.db)
 
     def test_all_returns_all_lists(self):

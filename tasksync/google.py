@@ -1,9 +1,26 @@
+# Copyright (C) 2012 Richard Burnison
+#
+# This file is part of tasksync.
+#
+# tasksync is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# tasksync is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with tasksync.  If not, see <http://www.gnu.org/licenses/>.
+
 """ Provides a simple realization of Google Tasks. """
 
 import httplib2
 import oauth2client
 import oauth2client.tools
-import twgs
+import tasksync
 
 from datetime import datetime
 from apiclient import discovery, http
@@ -11,25 +28,31 @@ from oauth2client.file import Storage
 from twiggy import log
 
 
-class GoogleTask(twgs.Task, twgs.UpstreamTask):
+class GoogleTask(tasksync.Task, tasksync.UpstreamTask):
     """ Implementation for Google Tasks. """
 
-    def __init__(self, source, project):
+    def __init__(self, source, list_name):
+        if list_name is None:
+            raise ValueError("A list name is required.")
+
         super(GoogleTask, self).__init__()
         self._source = source
-        self._project = project
-        if self._project is None:
-            raise ValueError("A project is required.")
+        self.list_name = list_name
+
+    def __str__(self):
+        return "%s[id=%s,l=%s,s=%s]" % (
+                'GoogleTask', self.uid, self.list_name, self.subject)
 
     def copy_from(self, other):
         if other is None:
             raise ValueError("Cannot sync with nothing.")
 
+        self.list_name = getattr(other, 'list_name', self.list_name)
+        self.__set_or_delete('title', other.subject)
+
         dfmt = self.__format_date # Format callback.
-        self._project = other.project
-        self._set_or_delete('title', other.subject)
-        self._set_or_delete('due', other.due, fmt=dfmt)
-        self._set_or_delete('completed', other.completed, fmt=dfmt)
+        self.__set_or_delete('due', other.due, fmt=dfmt)
+        self.__set_or_delete('completed', other.completed, fmt=dfmt)
 
     @property
     def should_sync(self):
@@ -58,10 +81,6 @@ class GoogleTask(twgs.Task, twgs.UpstreamTask):
             raise ValueError("Unknown status, %s" % status)
 
     @property
-    def project(self):
-        return self._project
-
-    @property
     def subject(self):
         return self._source.get('title', None)
 
@@ -85,69 +104,75 @@ class GoogleTask(twgs.Task, twgs.UpstreamTask):
         #pylint: disable=R0201,C0111
         return datetime.strftime(iso_date, '%Y-%m-%dT%H:%M:%S.000Z')
 
-class GoogleTaskFactory(twgs.TaskFactory):
-    def create_from(self, **kwargs):
-        """ Create a new task from another task, 'other', or a map, 'map'. """
+    def __set_or_delete(self, key, value, fmt=None):
+        if value is None:
+            if key in self._source:
+                del self._source[key]
+        else:
+            if not fmt is None:
+                value = fmt(value)
+            self._source[key] = value
+
+class GoogleTaskFactory(tasksync.TaskFactory):
+    def create_from(self, list_name='@default', **kwargs):
+        """
+        Create a new task from another task, 'other', or a map, 'map'.
+        In all cases, the provided task_list will be assigned to the
+        new instance.
+        """
         if 'map' in kwargs:
-            if 'project' not in kwargs:
-                raise KeyError("A project must be provided.")
-            else:
-                return self._create_from_map(kwargs['map'].copy(),
-                        kwargs['project'])
-
+            return GoogleTask(kwargs['map'].copy(), list_name)
         elif 'other' in kwargs:
-            project = kwargs.get('project', None)
-            return self._create_from_other(kwargs['other'], project)
-
+            return self._create_from_other(kwargs['other'], list_name)
         else:
             raise KeyError('Either a map or task argument must be provided.')
 
-    def _create_from_map(self, source, project):
-        return GoogleTask(source, project)
+        return 
 
-    def _create_from_other(self, other, project):
-        #pylint: disable=W0212
+    def _create_from_other(self, other, list_name):
         status = 'needsAction' if other.status == 'pending' else 'completed'
-        task = GoogleTask({'status':status}, project=other.project)
+        task = GoogleTask({'status':status}, list_name)
         task.copy_from(other)
-        task._project = project or other.project
+        task.list_name = list_name
         return task
 
-class GoogleTaskRepository(twgs.TaskRepository):
+class GoogleTaskRepository(tasksync.TaskRepository):
     def __init__(self, factory, client=None, **kwargs):
         self._factory = factory
         self._client = client or ApiClient(**kwargs)
-        self._projects = self.__load_projects()
+        self._task_lists = self.__load_task_lists(kwargs['task_list_filter'])
 
     def batch_create(self):
-        return http.BatchHttpRequest()
+        return {'count':0, 'batch':http.BatchHttpRequest()}
 
     def batch_close(self, batch):
-        self._client.execute(batch)
+        if batch['count'] > 0:
+            self._client.execute(batch['batch'])
 
     def all(self):
         tasks = []
-        for project in self._projects.keys():
-            log.info("Retrieving tasks for {0}.", project)
+        for task_list in self._task_lists.keys():
+            log.debug("Retrieving tasks for {0}.", task_list)
 
-            method = lambda s: s.list(tasklist=self._projects[project])
+            method = lambda s: s.list(tasklist=self._task_lists[task_list])
             upstream_tasks = self._client.tasks(method)
             upstream_tasks = self._client.execute(upstream_tasks)
             if 'items' in upstream_tasks:
-                tasks += [self._factory.create_from(map=t, project=project)
+                tasks += [self._factory.create_from(task_list, map=t)
                         for t in upstream_tasks['items']
                         if t['title'] != '']
         return tasks
 
     def delete(self, gtask, batch, cb=None):
-        tasklist = self._projects[gtask.project]
+        tasklist = self._task_lists[gtask.list_name]
         def method(service):
             action = service.delete(task=gtask.uid, tasklist=tasklist)
-            batch.add(action, callback=cb)
+            batch['batch'].add(action, callback=cb)
+            batch['count'] += 1
         self._client.tasks(method)
 
     def save(self, gtask, batch, userdata=None, cb=None):
-        tasklist = self._projects[gtask.project]
+        tasklist = self._task_lists.get(gtask.list_name, '@default')
         def method(service):
             action = None
             if gtask.uid is None:
@@ -158,15 +183,15 @@ class GoogleTaskRepository(twgs.TaskRepository):
             return action
 
         action = self._client.tasks(method)
-        batch.add(action, callback=self.__batch_cb(gtask, userdata, cb))
+        batch['batch'].add(action, callback=self.__batch_cb(gtask, userdata, cb))
+        batch['count'] += 1
 
-    def __load_projects(self):
-        projects = {}
+    def __load_task_lists(self, task_list_filter):
         lists = self._client.tasklists(lambda s: s.list())
         lists = self._client.execute(lists)
-        for p in lists['items']:
-            projects[p['title']] = p['id']
-        return projects
+        return {p['title']:p['id']
+                for p in lists['items']
+                if task_list_filter(p['title'])}
 
     def __batch_cb(self, gtask, userdata, cb):
         def impl(request_id, response, exception):
