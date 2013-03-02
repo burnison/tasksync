@@ -9,7 +9,7 @@ setup(
         author_email='richard@burnison.ca',
         url='http://www.burnison.ca/',
 
-        packages=['tasksync'],
+        packages=find_packages(),
         test_suite='nose.collector',
 
         install_requires=[
@@ -20,4 +20,8 @@ setup(
         tests_require=[
             'nose>=1.0',
             'mockito>=0.5'],
+
+        entry_points={
+            'console_scripts':['tasksync = tasksync.sync:main']
+        }
 )
