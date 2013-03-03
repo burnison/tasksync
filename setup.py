@@ -10,13 +10,20 @@ setup(
         url='http://www.burnison.ca/',
 
         packages=find_packages(),
+        include_package_data=True,
+        zip_safe=False,
+
         test_suite='nose.collector',
 
         install_requires=[
             'google-api-python-client>=1.0',
             'httplib2>=0.7',
             'twiggy',
-            'taskw>=0.4.5'],
+            'taskw==0.4.5'],
+
+        dependency_links = [
+            'https://github.com/burnison/taskw/tarball/completed_task_inclusion#egg=taskw-0.4.5'],
+
         tests_require=[
             'nose>=1.0',
             'mockito>=0.5'],
