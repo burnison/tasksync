@@ -58,7 +58,6 @@ def __tw2gt_upstream(dtask, utask):
     """
     if utask.list_name is None:
         utask.list_name = '@default'
-    return True
 
 def __tw2gt_downstream(utask, dtask):
     """
@@ -66,7 +65,7 @@ def __tw2gt_downstream(utask, dtask):
     that the task should not be synced. You may use this to map UDA
     types.
     """
-    return True
+    pass
 
 executions = {
     # Task Warrior to Google Tasks
@@ -74,12 +73,14 @@ executions = {
         'upstream':{
             'factory':__google_task_factory,
             'repository':__google_task_repository,
+            'filter':None,
             'cb':__tw2gt_upstream,
             'delete_orphans':False
         },
         'downstream':{
             'factory':__tw_task_factory,
             'repository':__tw_task_repository,
+            'filter':None,
             'cb':__tw2gt_downstream,
             'delete_orphans':True
         },

@@ -77,7 +77,8 @@ def __sync_downstream(execution, queue):
             dtask.associate_with(utask)
             log.info("Created {0} from {1}.", dtask, utask)
 
-        if not execution['downstream']['cb'](utask, dtask):
+        task_filter = execution['downstream']['filter']
+        if not task_filter is None and not task_filter(utask, dtask):
             log.info("Skipping sync for {0}->{1}", utask, dtask)
             continue
 
@@ -102,6 +103,10 @@ def __sync_downstream(execution, queue):
             else:
                 dtask.copy_from(utask)
                 dtask.associate_with(utask)
+
+        task_cb = execution['downstream']['cb']
+        if not task_cb is None:
+            task_cb(utask, dtask)
 
         execution['downstream']['repository'].save(dtask)
 
@@ -129,7 +134,8 @@ def __sync_upstream(execution, queue):
             utask = execution['upstream']['factory'].create_from(other=dtask)
             log.info("Created {0} from {1}.", utask, dtask)
 
-        if not execution['upstream']['cb'](dtask, utask):
+        task_filter = execution['upstream']['filter']
+        if not task_filter is None and not task_filter(dtask, utask):
             log.info("Skipping sync for {0}->{1}", dtask, utask)
             continue
 
@@ -142,6 +148,11 @@ def __sync_upstream(execution, queue):
         else:
             log.info("Upstream sync required for {0}->{1}", dtask, utask)
             utask.copy_from(dtask)
+
+            task_cb = execution['upstream']['cb']
+            if not task_cb is None:
+                task_cb(dtask, utask)
+
             execution['upstream']['repository'].save(utask, batch=batch, userdata=dtask, cb=task_created)
 
     execution['upstream']['repository'].batch_close(batch)

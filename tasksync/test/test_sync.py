@@ -41,12 +41,14 @@ class TestSync(object):
                 'repository':self.upstream_repo,
                 'factory':self.upstream_factory,
                 'delete_orphans':False,
-                'cb':lambda d, u: True},
+                'filter':lambda d, u: True,
+                'cb':None,},
             'downstream':{
                 'repository':self.downstream_repo,
                 'factory':self.downstream_factory,
                 'delete_orphans':False,
-                'cb':lambda u, d: True}
+                'filter':lambda u, d: True,
+                'cb':None,}
         };
 
     def _do_sync_all(self):
@@ -80,7 +82,7 @@ class TestSync(object):
         when(self.downstream_repo).all().thenReturn([self.downstream[0]])
         when(self.upstream_repo).all().thenReturn([])
 
-        self.execution['upstream']['cb'] = lambda d, u: False
+        self.execution['upstream']['filter'] = lambda d, u: False
         self._do_sync_all()
 
         verify(self.downstream_repo, 0).save(any())
@@ -149,7 +151,7 @@ class TestSync(object):
         # This one is needed because downstream calls associate()
         when(self.downstream_factory).create_from(other=u).thenReturn(d)
 
-        self.execution['downstream']['cb'] = lambda u, d: False
+        self.execution['downstream']['filter'] = lambda u, d: False
         self._do_sync_all()
 
         verify(self.downstream_repo, 0).save(any())
