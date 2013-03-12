@@ -21,7 +21,7 @@ from tasksync.task import TaskRepository, TaskFactory
 from tasksync.google import GoogleTask, GoogleTaskRepository, GoogleTaskFactory
 from tasksync.taskwarrior import TaskWarriorTask, TaskWarriorTaskRepository
 from tasksync.taskwarrior import TaskWarriorTaskFactory
-import config
+from tasksync.config import executions
 
 __all__ = [
     sync_all,

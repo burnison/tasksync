@@ -31,131 +31,100 @@ def sync_all(execution):
     downstream_q = []
 
     for utask in utasks:
-        # Skip anything that shouldn't be synced.
-        if not utask.should_sync:
+        if not utask.should_sync():
             continue
 
         known_tasks = [t for t in dtasks if t.is_associated_with(utask)]
-        # The current task doesn't have a local counterpart.
         if len(known_tasks) == 0:
+            log.debug("Upstream {0} isn't known downstream.", utask)
             downstream_q.append((utask, None))
-            log.debug("Upstream {0} isn't known locally.", utask)
         else:
             for dtask in known_tasks:
                 dtasks.discard(dtask)
                 if dtask == utask:
-                    log.debug("Task {0}->{1} is up-to-date.", dtask, utask)
-                    continue
+                    log.debug("Tasks {0} and {1} are up-to-date.", utask, dtask)
                 elif dtask.stale(utask):
-                    log.debug("Sync required {0}->{1}.", dtask, utask)
+                    log.info("Sync required {0}->{1}.", utask, dtask)
                     downstream_q.append((utask, dtask))
                 else:
-                    log.debug("Sync required {0}->{1}.", utask, dtask)
+                    # Downstream wins (no other way to solve this).
+                    log.info("Sync required {0}->{1}.", dtask, utask)
                     upstream_q.append((dtask, utask))
 
     # The remaining tasks in the downstream task list are not known upstream.
     # It's possible that a task is being excluded from syncronization. Check it.
     for dtask in dtasks:
-        if dtask.should_sync:
-            if dtask.association is None:
-                upstream_q.append((dtask, None))
-            else:
-                downstream_q.append((None, dtask))
-
-    __sync_downstream(execution, downstream_q)
-    __sync_upstream(execution, upstream_q)
-
-def __sync_downstream(execution, queue):
-    """
-    Updates the local task to match the upstream source.
-    """
-    # FIXME: Cyclomatic complexity a bit too high.
-    for (utask, dtask) in queue:
-        if dtask is None:
-            # The task isn't managed locally. Create it.
-            dtask = execution['downstream']['factory'].create_from(other=utask)
-            dtask.associate_with(utask)
-            log.info("Created {0} from {1}.", dtask, utask)
-
-        task_filter = execution['downstream']['filter']
-        if not task_filter is None and not task_filter(utask, dtask):
-            log.info("Skipping sync for {0}->{1}", utask, dtask)
+        if not dtask.should_sync():
             continue
 
-        elif utask is None:
-            if not dtask.association is None:
-                # Associated task was deleted upstream.
-                if execution['downstream']['delete_orphans']:
-                    log.info("Deleting orphaned local task, {0}.", dtask)
-                    execution['downstream']['repository'].delete(dtask)
-                    continue
-                else:
-                    log.info("Skipping orphan, {0}.", dtask)
-            else:
-                # This'd mean there's a bug in the enqueuing algorithm.
-                log.error("Received unmanaged downstream task, {0}.", dtask)
+        elif dtask.association is None:
+            # An unknown task.
+            upstream_q.append((dtask, None))
         else:
-            log.info("Downstream sync required for {0}->{1}", utask, dtask)
-            if dtask.is_completed and utask.is_pending:
-                # TODO: Add reopening support.
-                log.warning("Reopening of {0} is not supported.", dtask)
-                continue
-            else:
-                dtask.copy_from(utask)
-                dtask.associate_with(utask)
+            downstream_q.append((None, dtask))
 
-        task_cb = execution['downstream']['cb']
-        if not task_cb is None:
-            task_cb(utask, dtask)
+    __sync_tasks(execution['upstream'], execution['downstream'], downstream_q)
+    __sync_tasks(execution['downstream'], execution['upstream'], upstream_q)
 
-        execution['downstream']['repository'].save(dtask)
 
-# TODO: Merge this function with the downstream sync. Too much redundancy.
-# FIXME: This is tightly coupled with Google Tasks. Can't really be reused much.
-def __sync_upstream(execution, queue):
-    """
-    Updates the upstream task to match the local source.
-    """
+def __delete_orphan(dest, dest_batch, dest_task):
+    if not dest['delete_orphans']:
+        log.info("Skipping orphan, {0}.", dest_task)
+        return False
+    log.info("Deleting orphan for {0}.", dest_task)
+    dest['repository'].delete(dest_task, dest_batch, None, None)
+    return True
+
+def __sync_task(source, source_batch, source_task, dest, dest_batch, dest_task):
+    dest_task.copy_from(source_task)
+
+    task_cb = dest['cb']
+    if not task_cb is None:
+        task_cb(source_task, dest_task)
+
+    def task_created(dest_task, source_task):
+        if not isinstance(source_task, tasksync.DownstreamTask):
+            # A sync is only required when the source is a downstream task.
+            return
+        log.info("Successfully synced {0}->{1}.", source_task, dest_task)
+        if source_task.association is None:
+            source_task.copy_from(dest_task)
+            source['repository'].save(source_task, source_batch, None, None)
+
+    dest['repository'].save(dest_task, dest_batch, task_created, source_task)
+
+def __sync_tasks(source, dest, queue):
     if(len(queue) < 1):
         return
 
-    # Keep things simple: use a registry.
-    batch = execution['upstream']['repository'].batch_create()
-    def task_created(utask, dtask):
-        log.info("Syncing local {0}->{1}.", dtask, utask)
-        dtask.copy_from(utask)
-        dtask.associate_with(utask)
-        execution['downstream']['repository'].save(dtask)
+    source_batch = source['repository'].batch_open()
 
-    # FIXME: Cyclomatic complexity a bit too high.
-    for (dtask, utask) in queue:
-        if utask is None:
-            # The task isn't known upstream.
-            utask = execution['upstream']['factory'].create_from(other=dtask)
-            log.info("Created {0} from {1}.", utask, dtask)
+    dest_batch = dest['repository'].batch_open()
+    for (source_task, dest_task) in queue:
+        if source_task is None or source_task.is_deleted:
+            log.info("Identified orphan for {0}.", dest_task)
+            __delete_orphan(dest, dest_batch, dest_task)
+            continue
+        elif dest_task is None:
+            # The destination task isn't known. It's either orphaned or new.
+            dest_task = dest['factory'].create_from(other=source_task)
+            log.debug("Created {0} from {1}.", dest_task, source_task)
 
-        task_filter = execution['upstream']['filter']
-        if not task_filter is None and not task_filter(dtask, utask):
-            log.info("Skipping sync for {0}->{1}", dtask, utask)
+        if not dest_task.should_sync_with(source_task):
+            log.debug("Skipping sync for rule {0}->{1}", source_task, dest_task)
             continue
 
-        elif dtask.is_deleted:
-            if execution['upstream']['delete_orphans']:
-                log.info("Upstream delete required for {0}->{1}", dtask, utask)
-                execution['upstream']['repository'].delete(utask, batch=batch)
-            else:
-                log.info("Skipping orphan, {0}.", utask)
+        task_filter = dest['filter']
+        if not task_filter is None and not task_filter(source_task, dest_task):
+            log.debug("Skipping sync for {0}->{1}", source_task, dest_task)
+            continue
         else:
-            log.info("Upstream sync required for {0}->{1}", dtask, utask)
-            utask.copy_from(dtask)
+            log.info("Syncing {0}->{1}", source_task, dest_task)
+            __sync_task(source, source_batch, source_task,
+                    dest, dest_batch, dest_task)
 
-            task_cb = execution['upstream']['cb']
-            if not task_cb is None:
-                task_cb(dtask, utask)
-
-            execution['upstream']['repository'].save(utask, batch=batch, userdata=dtask, cb=task_created)
-
-    execution['upstream']['repository'].batch_close(batch)
+    dest['repository'].batch_close(dest_batch)
+    source['repository'].batch_close(source_batch)
 
 def main():
     """ Main method. """

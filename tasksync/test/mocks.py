@@ -29,13 +29,19 @@ class MockTask(tasksync.Task):
         self._provider = kwargs.get('provider', None)
         self._etag = kwargs.get('etag', None)
 
-    @property
     def should_sync(self):
+        return True
+
+    def should_sync_with(self, other):
         return True
 
     @property
     def uid(self):
         return self._uid
+
+    @property
+    def etag(self):
+        return self._etag
 
     @property
     def status(self):
@@ -88,7 +94,3 @@ class MockUpstreamTask(MockTask, tasksync.UpstreamTask):
     @property
     def provider(self):
         return self._provider
-
-    @property
-    def etag(self):
-        return self._etag

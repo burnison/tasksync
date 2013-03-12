@@ -53,13 +53,6 @@ class UpstreamTask(object):
         """ Get a unique association name for this instance. """
         raise NotImplementedError
 
-    @abc.abstractproperty
-    def etag(self):
-        """
-        Return a unique identifier for the current state.
-        """
-        raise NotImplementedError
-
 class Task(object):
     #pylint: disable=E0202
     """ An abstract task representation. """
@@ -73,6 +66,13 @@ class Task(object):
         """
         Gets this task's unique identifier. This value may be used for
         long-term storage.
+        """
+        raise NotImplementedError
+
+    @abc.abstractproperty
+    def etag(self):
+        """
+        Return a unique identifier for the current state.
         """
         raise NotImplementedError
 
@@ -115,19 +115,26 @@ class Task(object):
     def is_deleted(self):
         return self.status == 'deleted'
 
-    @property
+
+    @abc.abstractmethod
     def should_sync(self):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def should_sync_with(self, other):
         raise NotImplementedError
 
     @abc.abstractmethod
     def copy_from(self, other):
         raise NotImplementedError
 
+
     def __eq__(self, other):
         if other is None:
             return False
 
-        return (self.subject == other.subject
+        return (self.etag == other.etag
+            and self.subject == other.subject
             and self.due == other.due
             and self.completed == other.completed)
 
@@ -141,10 +148,16 @@ class TaskRepository(object):
         """ Load all tasks. """
         raise NotImplementedError
 
-    def save(self, task, batch=None, userdata=None, cb=None):
+    def batch_open(self):
+        raise NotImplementedError
+
+    def batch_close(self, batch):
+        raise NotImplementedError
+
+    def save(self, task, batch, cb, userdata):
         """ Save the specified task. """
         raise NotImplementedError
 
-    def delete(self, task, batch=None, userdata=None, cb=None):
+    def delete(self, task, batch, cb, userdata):
         """ Delete the specified task. """
         raise NotImplementedError

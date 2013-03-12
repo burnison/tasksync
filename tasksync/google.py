@@ -43,6 +43,12 @@ class GoogleTask(tasksync.Task, tasksync.UpstreamTask):
         return "%s[id=%s,l=%s,s=%s]" % (
                 'GoogleTask', self.uid, self.list_name, self.subject)
 
+    def should_sync(self):
+        return True
+
+    def should_sync_with(self, other):
+        return True
+
     def copy_from(self, other):
         if other is None:
             raise ValueError("Cannot sync with nothing.")
@@ -56,10 +62,6 @@ class GoogleTask(tasksync.Task, tasksync.UpstreamTask):
 
         if other.is_completed:
             self._source['status'] = 'completed'
-
-    @property
-    def should_sync(self):
-        return True
 
     @property
     def provider(self):
@@ -145,7 +147,7 @@ class GoogleTaskRepository(tasksync.TaskRepository):
         self._client = client or ApiClient(**kwargs)
         self._task_lists = self.__load_task_lists(kwargs['task_list_filter'])
 
-    def batch_create(self):
+    def batch_open(self):
         return {'count':0, 'batch':http.BatchHttpRequest()}
 
     def batch_close(self, batch):
@@ -166,15 +168,16 @@ class GoogleTaskRepository(tasksync.TaskRepository):
                         if t['title'] != '']
         return tasks
 
-    def delete(self, gtask, batch, cb=None):
+    def delete(self, gtask, batch, cb, userdata):
         tasklist = self._task_lists[gtask.list_name]
         def method(service):
             action = service.delete(task=gtask.uid, tasklist=tasklist)
-            batch['batch'].add(action, callback=cb)
             batch['count'] += 1
+            batch['batch'].add(action,
+                    callback=self.__batch_cb(gtask, userdata, cb))
         self._client.tasks(method)
 
-    def save(self, gtask, batch, userdata=None, cb=None):
+    def save(self, gtask, batch, cb, userdata):
         tasklist = self._task_lists.get(gtask.list_name, '@default')
         def method(service):
             action = None
@@ -186,8 +189,9 @@ class GoogleTaskRepository(tasksync.TaskRepository):
             return action
 
         action = self._client.tasks(method)
-        batch['batch'].add(action, callback=self.__batch_cb(gtask, userdata, cb))
         batch['count'] += 1
+        batch['batch'].add(action,
+                callback=self.__batch_cb(gtask, userdata, cb))
 
     def __load_task_lists(self, task_list_filter):
         lists = self._client.tasklists(lambda s: s.list())

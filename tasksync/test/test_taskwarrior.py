@@ -17,15 +17,21 @@
 
 #pylint: disable=C0103,C0111,I0011,I0012,W0704,W0142,W0212,W0232,W0613,W0702
 #pylint: disable=R0201,W0614,R0914,R0912,R0915,R0913,R0904,R0801,W0201,R0902
+import datetime
 import tasksync
 
 from mocks import MockUpstreamTask
 from mockito import mock, when, verify, any
 from nose.tools import raises, eq_, ok_
 
-TASK_1 = {"status":"pending", "description":"a", "uuid":"1",
+
+UPSTREAM_TASK = {
+    "id":"1", "subject":"a",
+    "status":"pending", "due":datetime.datetime(2001, 02, 03)}
+
+TW_TASK_MANAGED = {"status":"pending", "description":"a", "uuid":"1",
             "project":"test", "due":"1234567890",}
-TASK_2 = {"status":"completed", "description":"b", "project":"test"}
+TW_TASK_UNMANAGED = {"status":"completed", "description":"b", "project":"test"}
 
 class TestTaskWarriorTask(object):
     def setup(self):
@@ -33,7 +39,7 @@ class TestTaskWarriorTask(object):
 
     # TODO: Need some kind of state transition methods.
     def test_status_mapping(self):
-        task = self.factory.create_from(map=TASK_1, project='test')
+        task = self.factory.create_from(map=TW_TASK_MANAGED, project='test')
         task._source['status'] = 'pending'
         eq_(task.status, 'pending')
         ok_(task.is_pending)
@@ -51,19 +57,19 @@ class TestTaskWarriorTaskFactory(object):
         self.factory = tasksync.TaskWarriorTaskFactory()
 
     def test_create_from_map(self):
-        task = self.factory.create_from(map=TASK_1, project='test')
+        task = self.factory.create_from(map=TW_TASK_MANAGED, project='test')
         eq_(task.project, 'test')
         eq_(task.uid, '1')
         eq_(task.status, 'pending')
         eq_(task.subject, 'a')
         
     def test_create_from_other(self):
-        task = self.factory.create_from(map=TASK_1)
-        task = self.factory.create_from(other=task)
-        eq_(task.project, 'test')
+        source_task = MockUpstreamTask(**UPSTREAM_TASK)
+        task = self.factory.create_from(other=source_task)
         eq_(task.status, 'pending')
         eq_(task.subject, 'a')
         eq_(task.uid, None)
+        ok_(task.is_associated_with(source_task))
 
     def test_associate_with(self):
         upstream = MockUpstreamTask(provider='p', uid='u')
@@ -87,17 +93,33 @@ class TestTaskWarriorTaskRepository(object):
 
     def test_all_returns_all_lists(self):
         when(self.db).load_tasks().thenReturn(
-                {'pending':[TASK_1], 'completed':[TASK_2]})
+                {'pending':[TW_TASK_MANAGED], 'completed':[TW_TASK_UNMANAGED]})
         eq_(len(self.repository.all()), 2)
 
     def test_save_inserts_unknown(self):
-        when(self.db).task_add(**TASK_2).thenReturn(TASK_1)
-        task = self.factory.create_from(map=TASK_2)
-        self.repository.save(task)
-        eq_(task._source, TASK_1)
+        when(self.db).task_add(**TW_TASK_UNMANAGED).thenReturn(TW_TASK_MANAGED)
+        task = self.factory.create_from(map=TW_TASK_UNMANAGED)
+
+        def cb(b, c):
+            c._source['uuid'] = 1
+            eq_(b._source, TW_TASK_MANAGED)
+
+        batch = self.repository.batch_open();
+        self.repository.save(task, batch, cb, task)
+        self.repository.batch_close(batch)
+
+        eq_(task.uid, 1) # updated in the callback (assert callback happens)
 
     def test_save_updates_known(self):
-        task = self.factory.create_from(map=TASK_1)
-        task._source['id'] = '1'
-        self.repository.save(task,)
-        verify(self.db).task_update(any())
+        task = self.factory.create_from(map=TW_TASK_MANAGED)
+        task._source['uuid'] = '1'
+
+        def cb(b, c):
+            eq_(task, b)
+            ok_(c)
+
+        batch = self.repository.batch_open();
+        self.repository.save(task, batch, cb, True)
+        self.repository.batch_close(batch)
+
+        verify(self.db).task_update(task._source)

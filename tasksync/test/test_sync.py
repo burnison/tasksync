@@ -61,9 +61,8 @@ class TestSync(object):
 
         self._do_sync_all()
 
-        verify(self.downstream_repo, 0).save(any())
-        verify(self.upstream_repo, 0).save(
-                any(), batch=any(), userdata=any(), cb=any())
+        verify(self.downstream_repo, 0).save(any(), any(), any(), any())
+        verify(self.upstream_repo, 0).save(any(), any(), any(), any())
 
     def test_unknown_from_downstream(self):
         d = self.downstream[0]
@@ -74,20 +73,22 @@ class TestSync(object):
 
         self._do_sync_all()
 
-        verify(self.downstream_repo, 0).save(any())
-        verify(self.upstream_repo).save(
-                u, batch=any(), userdata=any(), cb=any())
+        verify(self.downstream_repo, 0).save(any(), any(), any(), any())
+        verify(self.upstream_repo).save(u, any(), any(), any())
 
     def test_unknown_from_downstream_filter_drop(self):
-        when(self.downstream_repo).all().thenReturn([self.downstream[0]])
+        d = self.downstream[0]
+        u = self.upstream[0]
+        when(self.downstream_repo).all().thenReturn([d])
         when(self.upstream_repo).all().thenReturn([])
+        # Filter only happens after create.
+        when(self.upstream_factory).create_from(other=d).thenReturn(u)
 
         self.execution['upstream']['filter'] = lambda d, u: False
         self._do_sync_all()
 
-        verify(self.downstream_repo, 0).save(any())
-        verify(self.upstream_repo, 0).save(
-                any(), batch=any(), userdata=any(), cb=any())
+        verify(self.downstream_repo, 0).save(any(), any(), any(), any())
+        verify(self.upstream_repo, 0).save(any(), any(), any(), any())
 
     def test_known_from_downstream_not_stale(self):
         d = self.downstream[0]
@@ -98,9 +99,8 @@ class TestSync(object):
 
         self._do_sync_all()
 
-        verify(self.downstream_repo, 0).save(any())
-        verify(self.upstream_repo).save(
-                u, batch=any(), userdata=any(), cb=any())
+        verify(self.downstream_repo, 0).save(any(), any(), any(), any())
+        verify(self.upstream_repo).save(u, any(), any(), any())
 
     def test_known_from_downstream_stale(self):
         d = self.downstream[0]
@@ -112,9 +112,8 @@ class TestSync(object):
 
         self._do_sync_all()
 
-        verify(self.downstream_repo).save(d)
-        verify(self.upstream_repo, 0).save(
-                any(), batch=any(), userdata=any(), cb=any())
+        verify(self.downstream_repo).save(d, any(), any(), any())
+        verify(self.upstream_repo, 0).save(any(), any(), any(), any())
 
     def test_known_from_upstream(self):
         d = self.downstream[0]
@@ -126,9 +125,8 @@ class TestSync(object):
 
         self._do_sync_all()
 
-        verify(self.downstream_repo).save(d)
-        verify(self.upstream_repo, 0).save(
-                any(), batch=any(), userdata=any(), cb=any())
+        verify(self.downstream_repo).save(d, any(), any(), any())
+        verify(self.upstream_repo, 0).save(any(), any(), any(), any())
 
     def test_unknown_from_upstream(self):
         d = self.downstream[0]
@@ -139,24 +137,22 @@ class TestSync(object):
 
         self._do_sync_all()
 
-        verify(self.downstream_repo).save(d)
-        verify(self.upstream_repo, 0).save(
-                any(), batch=any(), userdata=any(), cb=any())
+        verify(self.downstream_repo).save(d, any(), any(), any())
+        verify(self.upstream_repo, 0).save(any(), any(), any(), any())
 
     def test_unknown_from_upstream_filter_drop(self):
         d = self.downstream[0]
         u = self.upstream[0]
         when(self.downstream_repo).all().thenReturn([])
         when(self.upstream_repo).all().thenReturn([u])
-        # This one is needed because downstream calls associate()
+        # Filter only happens after create.
         when(self.downstream_factory).create_from(other=u).thenReturn(d)
 
         self.execution['downstream']['filter'] = lambda u, d: False
         self._do_sync_all()
 
-        verify(self.downstream_repo, 0).save(any())
-        verify(self.upstream_repo, 0).save(
-                any(), batch=any(), userdata=any(), cb=any())
+        verify(self.downstream_repo, 0).save(any(), any(), any(), any())
+        verify(self.upstream_repo, 0).save(any(), any(), any(), any())
 
     def test_known_deleted_from_upstream_with_orphan_removal(self):
         d = self.downstream[0]
@@ -167,9 +163,8 @@ class TestSync(object):
         self.execution['downstream']['delete_orphans'] = True
         self._do_sync_all()
 
-        verify(self.downstream_repo).delete(d)
-        verify(self.upstream_repo, 0).save(
-                any(), batch=any(), userdata=any(), cb=any())
+        verify(self.downstream_repo).delete(d, any(), any(), any())
+        verify(self.upstream_repo, 0).save(any(), any(), any(), any())
 
     def test_known_deleted_from_upstream_no_orphan_removal(self):
         d = self.downstream[0]

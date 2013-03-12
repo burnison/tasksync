@@ -54,22 +54,43 @@ class TaskWarriorTask(tasksync.Task, tasksync.DownstreamTask):
         self.__set_or_delete('due', other.due, fmt=dfmt)
         self.__set_or_delete('end', other.completed, fmt=dfmt)
 
-    @property
+        self.associate_with(other)
+
     def should_sync(self):
-        if self.status == 'recurring' or self.is_deleted:
-            # Don't send these upstream. They don't exist.
+        if self.is_deleted:
+            # A deleted task doesn't really exist.
             return False
-
+        elif self.is_recurring:
+            # Don't send these upstream. They're effectively factories.
+            return False
         elif self.is_completed and self.association is None:
-            # The task was completed locally. Probably not much value.
+            # The task was completed locally before it was ever created
+            # upstream. Probably not much value sending this up.
             return False
+        else:
+            return True
 
+    def should_sync_with(self, other):
+        if self.is_completed and other.is_pending:
+            # The task was marked done then reopened upstream. Effectively,
+            # the task was reopened. This isn't supported (for now).
+            log.warning("Reopening of {0} is not supported.", self)
+            return False
         else:
             return True
 
     @property
+    def is_recurring(self):
+        """ Identifies if this is a recurring task. """
+        return self.status == 'recurring'
+
+    @property
     def uid(self):
         return self._source.get('uuid', None)
+
+    @property
+    def etag(self):
+        return self._source.get(TaskWarriorTask.__UDA_ETAG)
 
     @property
     def status(self):
@@ -165,18 +186,41 @@ class TaskWarriorTaskRepository(tasksync.TaskRepository):
         wtasks = sum(wtasks.values(), [])
         return [self._factory.create_from(map=t) for t in wtasks]
 
-    def delete(self, task):
-        self._db.task_delete(uuid=task.uid)
+    def batch_open(self):
+        return {'count':0, 'create':[], 'update':[], 'delete':[]}
 
-    def save(self, task):
-        if task.uid is None:
-            task._source = self._db.task_add(**task._source)
-        else:
-            self._db.task_update(task._source)
+    def batch_close(self, batch):
+        for (m, c, u) in batch['create']:
+            self._close(self._db.task_add(**m), c, u)
 
+        for (m, c, u) in batch['update']:
+            self._db.task_update(m)
+            self._close(m, c, u)
+
+        for (m, c, u) in batch['delete']:
+            self._db.task_delete(uuid=m['uuid'])
+            if not c is None:
+                c(None, u)
+
+    def _close(self, source, cb, userdata):
+        task = self._factory.create_from(map=source)
+
+        # Task completion is a special case.
         if task.is_pending and not task.completed is None:
             log.info("Marking {0} as complete.", task)
             keys = {k:task._source[k]
                     for k in task._source.keys()
                     if k == 'uuid' or k == 'end'}
             task._source = self._db.task_done(**keys)
+
+        if not cb is None:
+            cb(task, userdata)
+
+    def delete(self, task, batch, cb, userdata):
+        batch['delete'].append((task._source, cb, userdata))
+
+    def save(self, task, batch, cb, userdata):
+        if task.uid is None:
+            batch['create'].append((task._source, cb, userdata))
+        else:
+            batch['update'].append((task._source, cb, userdata))

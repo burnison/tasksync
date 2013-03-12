@@ -18,6 +18,7 @@
 #pylint: disable=C0103,C0111,I0011,I0012,W0704,W0142,W0212,W0232,W0613,W0702
 #pylint: disable=R0201,W0614,R0914,R0912,R0915,R0913,R0904,R0801,W0201,R0902
 import tasksync
+
 from httplib2 import HttpLib2Error
 from mockito import *
 from nose.tools import raises, eq_, ok_
@@ -119,7 +120,6 @@ class TestGoogleTaskRepository(object):
         self.repository = tasksync.GoogleTaskRepository(self.factory,
                 client=self.client, task_list_filter=lambda t: True)
 
-
     def test_open_should_load_list_names(self):
         eq_(len(self.repository._task_lists), 2)
 
@@ -127,16 +127,17 @@ class TestGoogleTaskRepository(object):
         eq_(len(self.repository.all()), 2)
 
     def test_save_updates_known_to_batch(self):
-        batch = {'count':0, 'batch':MockBatch()}
         task = self.factory.create_from('home', map={'status':'needsAction'})
         task._source['id'] = '1'
-        self.repository.save(task, batch, cb=None)
+        batch = {'count':0, 'batch':MockBatch()}
+        self.repository.save(task, batch, None, None)
+        # FIXME: This is wonky.
         verify(batch['batch'].delegate).add(any(), callback=any())
 
     def test_execute_batch(self):
-        batch = {'count':0, 'batch':MockBatch()}
         task = self.factory.create_from('home', map={'status':'needsAction'})
-        self.repository.save(task, batch, cb=None)
+        batch = {'count':0, 'batch':MockBatch()}
+        self.repository.save(task, batch, None, None)
         self.repository.batch_close(batch)
         verify(self.client, 2).execute(any())
 
