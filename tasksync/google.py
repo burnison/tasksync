@@ -54,6 +54,9 @@ class GoogleTask(tasksync.Task, tasksync.UpstreamTask):
         self.__set_or_delete('due', other.due, fmt=dfmt)
         self.__set_or_delete('completed', other.completed, fmt=dfmt)
 
+        if other.is_completed:
+            self._source['status'] = 'completed'
+
     @property
     def should_sync(self):
         return True
