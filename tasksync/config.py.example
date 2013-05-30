@@ -19,7 +19,6 @@
 import os
 import errno
 import tasksync
-from twiggy import log
 
 #TODO: Clean up configuration.
 home = os.path.join(os.environ['HOME'], '.tasksync')

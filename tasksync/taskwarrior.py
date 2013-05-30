@@ -17,10 +17,12 @@
 
 """ Realization of TaskWarrior tasks. """
 import taskw
+import logging
 import tasksync
 
 from datetime import datetime
-from twiggy import log
+
+logger = logging.getLogger(__name__)
 
 class TaskWarriorTask(tasksync.Task, tasksync.DownstreamTask):
     """ Represents a TaskWarrior task. """
@@ -74,7 +76,7 @@ class TaskWarriorTask(tasksync.Task, tasksync.DownstreamTask):
         if self.is_completed and other.is_pending:
             # The task was marked done then reopened upstream. Effectively,
             # the task was reopened. This isn't supported (for now).
-            log.warning("Reopening of {0} is not supported.", self)
+            logger.warning("Reopening of %s is not supported.", self)
             return False
         else:
             return True
@@ -207,7 +209,7 @@ class TaskWarriorTaskRepository(tasksync.TaskRepository):
 
         # Task completion is a special case.
         if task.is_pending and not task.completed is None:
-            log.info("Marking {0} as complete.", task)
+            logger.info("Marking %s as complete.", task)
             keys = {k:task._source[k]
                     for k in task._source.keys()
                     if k == 'uuid' or k == 'end'}

@@ -18,7 +18,6 @@ setup(
         install_requires=[
             'google-api-python-client>=1.0',
             'httplib2>=0.8',
-            'twiggy',
             'taskw==0.5.1'],
 
         dependency_links = [

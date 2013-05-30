@@ -17,10 +17,10 @@
 
 #pylint: disable=C0111
 import sys
-import twiggy
+import logging
 import tasksync
 
-from twiggy import log
+logger = logging.getLogger(__name__)
 
 def sync_all(execution):
     """ Pulls down the task list. """
@@ -36,19 +36,19 @@ def sync_all(execution):
 
         known_tasks = [t for t in dtasks if t.is_associated_with(utask)]
         if len(known_tasks) == 0:
-            log.debug("Upstream {0} isn't known downstream.", utask)
+            logger.debug("Upstream %s isn't known downstream.", utask)
             downstream_q.append((utask, None))
         else:
             for dtask in known_tasks:
                 dtasks.discard(dtask)
                 if dtask == utask:
-                    log.debug("Tasks {0} and {1} are up-to-date.", utask, dtask)
+                    logger.debug("Tasks %s and %s are up-to-date.", utask, dtask)
                 elif dtask.stale(utask):
-                    log.info("Sync required {0}->{1}.", utask, dtask)
+                    logger.info("Sync required %s->%s.", utask, dtask)
                     downstream_q.append((utask, dtask))
                 else:
                     # Downstream wins (no other way to solve this).
-                    log.info("Sync required {0}->{1}.", dtask, utask)
+                    logger.info("Sync required %s->%s.", dtask, utask)
                     upstream_q.append((dtask, utask))
 
     # The remaining tasks in the downstream task list are not known upstream.
@@ -69,9 +69,9 @@ def sync_all(execution):
 
 def __delete_orphan(dest, dest_batch, dest_task):
     if not dest['delete_orphans']:
-        log.info("Skipping orphan, {0}.", dest_task)
+        logger.info("Skipping orphan, %s.", dest_task)
         return False
-    log.info("Deleting orphan for {0}.", dest_task)
+    logger.info("Deleting orphan for %s.", dest_task)
     dest['repository'].delete(dest_task, dest_batch, None, None)
     return True
 
@@ -86,7 +86,7 @@ def __sync_task(source, source_batch, source_task, dest, dest_batch, dest_task):
         if not isinstance(source_task, tasksync.DownstreamTask):
             # A sync is only required when the source is a downstream task.
             return
-        log.info("Successfully synced {0}->{1}.", source_task, dest_task)
+        logger.info("Successfully synced %s->%s.", source_task, dest_task)
         if source_task.association is None:
             source_task.copy_from(dest_task)
             source['repository'].save(source_task, source_batch, None, None)
@@ -102,24 +102,24 @@ def __sync_tasks(source, dest, queue):
     dest_batch = dest['repository'].batch_open()
     for (source_task, dest_task) in queue:
         if source_task is None or source_task.is_deleted:
-            log.info("Identified orphan for {0}.", dest_task)
+            logger.info("Identified orphan for %s.", dest_task)
             __delete_orphan(dest, dest_batch, dest_task)
             continue
         elif dest_task is None:
             # The destination task isn't known. It's either orphaned or new.
             dest_task = dest['factory'].create_from(other=source_task)
-            log.debug("Created {0} from {1}.", dest_task, source_task)
+            logger.debug("Created %s from %s.", dest_task, source_task)
 
         if not dest_task.should_sync_with(source_task):
-            log.debug("Skipping sync for rule {0}->{1}", source_task, dest_task)
+            logger.debug("Skipping sync for rule %s->%s", source_task, dest_task)
             continue
 
         task_filter = dest['filter']
         if not task_filter is None and not task_filter(source_task, dest_task):
-            log.debug("Skipping sync for {0}->{1}", source_task, dest_task)
+            logger.debug("Skipping sync for %s->%s", source_task, dest_task)
             continue
         else:
-            log.info("Syncing {0}->{1}", source_task, dest_task)
+            logger.info("Syncing %s->%s", source_task, dest_task)
             __sync_task(source, source_batch, source_task,
                     dest, dest_batch, dest_task)
 
@@ -128,10 +128,10 @@ def __sync_tasks(source, dest, queue):
 
 def main():
     """ Main method. """
-    twiggy.quickSetup(min_level=twiggy.levels.INFO, file=sys.stdout)
+    logging.basicConfig(level=logging.INFO)
 
     for execution in tasksync.config.executions:
-        log.info("Running {0}.", execution)
+        logger.info("Running - %s.", execution)
         sync_all(tasksync.config.executions[execution])
 
 if __name__ == "__main__":

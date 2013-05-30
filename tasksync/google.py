@@ -18,6 +18,7 @@
 """ Provides a simple realization of Google Tasks. """
 
 import httplib2
+import logging
 import oauth2client
 import oauth2client.tools
 import tasksync
@@ -25,8 +26,8 @@ import tasksync
 from datetime import datetime
 from apiclient import discovery, http
 from oauth2client.file import Storage
-from twiggy import log
 
+logger = logging.getLogger(__name__)
 
 class GoogleTask(tasksync.Task, tasksync.UpstreamTask):
     """ Implementation for Google Tasks. """
@@ -157,7 +158,7 @@ class GoogleTaskRepository(tasksync.TaskRepository):
     def all(self):
         tasks = []
         for task_list in self._task_lists.keys():
-            log.debug("Retrieving tasks for {0}.", task_list)
+            logger.debug("Retrieving tasks for %s.", task_list)
 
             method = lambda s: s.list(tasklist=self._task_lists[task_list])
             upstream_tasks = self._client.tasks(method)
@@ -203,8 +204,7 @@ class GoogleTaskRepository(tasksync.TaskRepository):
     def __batch_cb(self, gtask, userdata, cb):
         def impl(request_id, response, exception):
             if not exception is None:
-                log.error("Couldn't sync {0} ({1}): {2}",
-                        request_id, exception, exception)
+                logger.error("Couldn't sync %s: %s", request_id, exception)
                 return
             gtask._source = response
             if not cb is None:
