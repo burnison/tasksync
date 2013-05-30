@@ -17,12 +17,12 @@ setup(
 
         install_requires=[
             'google-api-python-client>=1.0',
-            'httplib2>=0.7',
+            'httplib2>=0.8',
             'twiggy',
-            'taskw==0.4.5'],
+            'taskw==0.5.1'],
 
         dependency_links = [
-            'https://github.com/burnison/taskw/tarball/completed_task_inclusion#egg=taskw-0.4.5'],
+            'https://github.com/burnison/taskw/tarball/completed_task_inclusion#egg=taskw-0.5.1'],
 
         tests_require=[
             'nose>=1.0',
