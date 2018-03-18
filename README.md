@@ -20,7 +20,7 @@ environment](https://virtualenv.pypa.io/en/stable/):
 1. `cd tasksync`
 1. `virtualenv .venv`
 1. `. .venv/bin/activate`
-
+1. `python setup.py install`
 
 And, to use:
 
