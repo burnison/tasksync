@@ -1,4 +1,4 @@
-# Copyright (C) 2012 Richard Burnison
+# Copyright (C) 2012-2018 Richard Burnison
 #
 # This file is part of tasksync.
 #
@@ -60,6 +60,9 @@ class Task(object):
     def __str__(self):
         return "%s[id=%s,s=%s]" % (
                 self.__class__.__name__, self.uid, self.subject)
+
+    def __hash__(self):
+        return self.uid.__hash__()
 
     @abc.abstractproperty
     def uid(self):

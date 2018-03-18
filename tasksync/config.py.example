@@ -1,4 +1,4 @@
-# Copyright (C) 2012 Richard Burnison
+# Copyright (C) 2012-2018 Richard Burnison
 #
 # This file is part of tasksync.
 #
@@ -16,39 +16,12 @@
 # along with tasksync.  If not, see <http://www.gnu.org/licenses/>.
 
 #pylint: disable=C0103,C0111,W0142
-import os
+from tasksync.google_tasks import GoogleTaskFactory, GoogleTaskRepository
+from tasksync.taskwarrior import TaskWarriorTaskFactory, TaskWarriorTaskRepository
+
 import errno
-import tasksync
-
-#TODO: Clean up configuration.
-home = os.path.join(os.environ['HOME'], '.tasksync')
-try:
-    os.makedirs(home)
-except OSError, e:
-    if e.errno != errno.EEXIST:
-        raise
-
-providers = {
-    'taskwarrior':{
-        'config':os.path.join(os.environ['HOME'], '.taskrc')
-    },
-    'google':{
-        'credential_storage':os.path.join(home, 'google.oauth'),
-        'client_id':'###',
-        'client_secret':'###',
-        'task_list_filter':lambda name: True,
-    }
-}
-
-
-# Executions
-__google_task_factory = tasksync.GoogleTaskFactory()
-__google_task_repository = tasksync.GoogleTaskRepository(
-        __google_task_factory, **providers['google'])
-
-__tw_task_factory = tasksync.TaskWarriorTaskFactory()
-__tw_task_repository = tasksync.TaskWarriorTaskRepository(
-        __tw_task_factory, **providers['taskwarrior'])
+import httplib2
+import os
 
 def __tw2gt_upstream(dtask, utask):
     """
@@ -66,22 +39,50 @@ def __tw2gt_downstream(utask, dtask):
     """
     pass
 
-executions = {
-    # Task Warrior to Google Tasks
-    'tw2gt':{
-        'upstream':{
-            'factory':__google_task_factory,
-            'repository':__google_task_repository,
-            'filter':None,
-            'cb':__tw2gt_upstream,
-            'delete_orphans':False
-        },
-        'downstream':{
-            'factory':__tw_task_factory,
-            'repository':__tw_task_repository,
-            'filter':None,
-            'cb':__tw2gt_downstream,
-            'delete_orphans':True
-        },
+def __tasksync_d():
+    home = os.path.join(os.environ['HOME'], '.tasksync')
+    try:
+        os.makedirs(home)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+    return home
+
+
+def executions(args):
+    __google_task_factory = GoogleTaskFactory()
+    __google_task_repository = GoogleTaskRepository(
+        __google_task_factory,
+        args,
+        credential_storage=os.path.join(__tasksync_d(), 'google.oauth'),
+        client_id=os.environ['CLIENT_ID'],
+        client_secret=os.environ['CLIENT_SECRET'],
+        task_list_filter=lambda name: True
+    )
+
+    __tw_task_factory = TaskWarriorTaskFactory()
+    __tw_task_repository = TaskWarriorTaskRepository(
+        __tw_task_factory,
+        config=os.path.join(os.environ['HOME'], '.taskrc')
+    )
+
+
+    return {
+        # Task Warrior to Google Tasks
+        'tw2gt':{
+            'upstream':{
+                'factory': __google_task_factory,
+                'repository': __google_task_repository,
+                'filter': None,
+                'cb': __tw2gt_upstream,
+                'delete_orphans': True
+            },
+            'downstream':{
+                'factory': __tw_task_factory,
+                'repository': __tw_task_repository,
+                'filter': None,
+                'cb': __tw2gt_downstream,
+                'delete_orphans': False
+            },
+        }
     }
-}

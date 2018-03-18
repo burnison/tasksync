@@ -1,4 +1,4 @@
-# Copyright (C) 2012 Richard Burnison
+# Copyright (C) 2012-2018 Richard Burnison
 #
 # This file is part of tasksync.
 #
@@ -14,22 +14,22 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with tasksync.  If not, see <http://www.gnu.org/licenses/>.
+from tasksync.task import Task, UpstreamTask, TaskFactory, TaskRepository
 
-""" Provides a simple realization of Google Tasks. """
+from apiclient import discovery, http
+from datetime import datetime
+from oauth2client.file import Storage
 
+import argparse
 import httplib2
 import logging
 import oauth2client
 import oauth2client.tools
-import tasksync
 
-from datetime import datetime
-from apiclient import discovery, http
-from oauth2client.file import Storage
 
 logger = logging.getLogger(__name__)
 
-class GoogleTask(tasksync.Task, tasksync.UpstreamTask):
+class GoogleTask(Task, UpstreamTask):
     """ Implementation for Google Tasks. """
 
     def __init__(self, source, list_name):
@@ -119,7 +119,7 @@ class GoogleTask(tasksync.Task, tasksync.UpstreamTask):
                 value = fmt(value)
             self._source[key] = value
 
-class GoogleTaskFactory(tasksync.TaskFactory):
+class GoogleTaskFactory(TaskFactory):
     def create_from(self, list_name='@default', **kwargs):
         """
         Create a new task from another task, 'other', or a map, 'map'.
@@ -133,7 +133,7 @@ class GoogleTaskFactory(tasksync.TaskFactory):
         else:
             raise KeyError('Either a map or task argument must be provided.')
 
-        return 
+        return
 
     def _create_from_other(self, other, list_name):
         status = 'needsAction' if other.status == 'pending' else 'completed'
@@ -142,10 +142,10 @@ class GoogleTaskFactory(tasksync.TaskFactory):
         task.list_name = list_name
         return task
 
-class GoogleTaskRepository(tasksync.TaskRepository):
-    def __init__(self, factory, client=None, **kwargs):
+class GoogleTaskRepository(TaskRepository):
+    def __init__(self, factory, flags, client=None, **kwargs):
         self._factory = factory
-        self._client = client or ApiClient(**kwargs)
+        self._client = client or ApiClient(flags, **kwargs)
         self._task_lists = self.__load_task_lists(kwargs['task_list_filter'])
 
     def batch_open(self):
@@ -213,24 +213,31 @@ class GoogleTaskRepository(tasksync.TaskRepository):
 
 class ApiClient(object):
     """ Wrapper around Google Task API. """
-    def __init__(self, **kwargs):
-        credentials = self._authenticate(**kwargs)
-        self._http = credentials.authorize(httplib2.Http())
+    def __init__(self, flags, **kwargs):
+        self._http = self._authenticate(flags, **kwargs).authorize(httplib2.Http())
         self._service = discovery.build(
-                serviceName='tasks', version='v1', http=self._http)
+            serviceName='tasks',
+            version='v1',
+            http=self._http
+        )
 
-    def _authenticate(self, **kwargs):
+    def _authenticate(self, flags, **kwargs):
         """ Get the auth token. """
         flow = oauth2client.client.OAuth2WebServerFlow(
                 client_id=kwargs['client_id'],
                 client_secret=kwargs['client_secret'],
-                scope='https://www.googleapis.com/auth/tasks',
+                scope=[
+                    'https://www.googleapis.com/auth/tasks',
+                    'https://www.googleapis.com/auth/tasks.readonly'
+                ],
                 user_agent='tasksync/1.0')
 
         storage = Storage(kwargs['credential_storage'])
         credentials = storage.get()
+
         if credentials is None or credentials.invalid:
-            credentials = oauth2client.tools.run(flow, storage)
+            credentials = oauth2client.tools.run_flow(flow, storage, flags=flags)
+
         return credentials
 
     def tasklists(self, method):

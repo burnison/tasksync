@@ -1,4 +1,4 @@
-# Copyright (C) 2012 Richard Burnison
+# Copyright (C) 2012-2018 Richard Burnison
 #
 # This file is part of tasksync.
 #
@@ -17,76 +17,77 @@
 
 #pylint: disable=C0103,C0111,I0011,I0012,W0704,W0142,W0212,W0232,W0613,W0702
 #pylint: disable=R0201,W0614,R0914,R0912,R0915,R0913,R0904,R0801,W0201,R0902
-import tasksync
-
 from httplib2 import HttpLib2Error
 from mockito import *
-from nose.tools import raises, eq_, ok_
+from tasksync.google_tasks import GoogleTask, GoogleTaskFactory, GoogleTaskRepository
+
+import argparse
+import unittest
 
 TASK_1 = {"status":"needsAction", "title":"Stuff", "id":"1", "etag":"1e",
         "kind":"tasks#task"}
 
-class TestGoogleTask(object):
-    def setup(self):
-        self.factory = tasksync.GoogleTaskFactory()
+class TestGoogleTask(unittest.TestCase):
+    def setUp(self):
+        self.factory = GoogleTaskFactory()
 
-    @raises(ValueError)
     def test_init_without_list_name(self):
-        tasksync.GoogleTask({}, None)
+        with self.assertRaises(ValueError):
+            GoogleTask({}, None)
 
     # FIXME: Need some kind of state transition methods.
     def test_status_mapping(self):
-        task = tasksync.GoogleTask({}, 'foo')
+        task = GoogleTask({}, 'foo')
 
         task._source['status'] = 'needsAction'
-        eq_(task.status, 'pending')
-        ok_(task.is_pending)
+        self.assertEqual(task.status, 'pending')
+        self.assertTrue(task.is_pending)
 
         task._source['status'] = 'completed'
-        eq_(task.status, 'completed')
-        ok_(task.is_completed)
+        self.assertEqual(task.status, 'completed')
+        self.assertTrue(task.is_completed)
 
 
-class TestGoogleTaskFactory(object):
-    def setup(self):
-        self.factory = tasksync.GoogleTaskFactory()
+class TestGoogleTaskFactory(unittest.TestCase):
+    def setUp(self):
+        self.factory = GoogleTaskFactory()
 
     def test_create_from_map(self):
         task = self.factory.create_from('test', map=TASK_1)
-        eq_(task.list_name, 'test')
-        eq_(task.uid, '1')
-        eq_(task.status, 'pending')
-        eq_(task.subject, 'Stuff')
-        eq_(task.etag, '1e')
+        self.assertEqual(task.list_name, 'test')
+        self.assertEqual(task.uid, '1')
+        self.assertEqual(task.status, 'pending')
+        self.assertEqual(task.subject, 'Stuff')
+        self.assertEqual(task.etag, '1e')
 
     def test_create_from_other(self):
         task = self.factory.create_from('test', map=TASK_1)
         task = self.factory.create_from('test', other=task)
-        eq_(task.list_name, 'test')
-        eq_(task.status, 'pending')
-        eq_(task.subject, 'Stuff')
-        eq_(task.uid, None)
-        eq_(task.etag, None)
+        self.assertEqual(task.list_name, 'test')
+        self.assertEqual(task.status, 'pending')
+        self.assertEqual(task.subject, 'Stuff')
+        self.assertEqual(task.uid, None)
+        self.assertEqual(task.etag, None)
 
     def test_create_from_other_passed_list_name_wins(self):
         task = self.factory.create_from('test', map=TASK_1)
         task = self.factory.create_from('test_overrides', other=task)
-        eq_(task.list_name, 'test_overrides')
+        self.assertEqual(task.list_name, 'test_overrides')
 
     def test_create_with_no_project_uses_default(self):
         task = self.factory.create_from('test', map=TASK_1)
         task = self.factory.create_from(other=task)
-        eq_(task.list_name, '@default')
+        self.assertEqual(task.list_name, '@default')
 
-    @raises(KeyError)
     def test_create_from_without_valid_source(self):
-        self.factory.create_from('list')
+        with self.assertRaises(KeyError):
+            self.factory.create_from('list')
 
 
-class TestGoogleTaskRepository(object):
-    def setup(self):
+class TestGoogleTaskRepository(unittest.TestCase):
+    def setUp(self):
         # Mock out the task lists (locally, list_names).
-        self.factory = tasksync.GoogleTaskFactory()
+        self.factory = GoogleTaskFactory()
         self.client = mock()
 
         list_name_home = {"kind": "tasks#taskList", "id":"1", "etag":"1",
@@ -117,14 +118,18 @@ class TestGoogleTaskRepository(object):
                 .thenReturn(tasklist_2_tasks)
         when(self.client).execute(tasklist_1_tasks).thenReturn(tasks_1)
         when(self.client).execute(tasklist_2_tasks).thenReturn(tasks_2)
-        self.repository = tasksync.GoogleTaskRepository(self.factory,
+
+
+        parser = argparse.ArgumentParser()
+        self.repository = GoogleTaskRepository(self.factory,
+                flags=parser.parse_args([]),
                 client=self.client, task_list_filter=lambda t: True)
 
     def test_open_should_load_list_names(self):
-        eq_(len(self.repository._task_lists), 2)
+        self.assertEqual(len(self.repository._task_lists), 2)
 
     def test_all_returns_all_lists(self):
-        eq_(len(self.repository.all()), 2)
+        self.assertEqual(len(self.repository.all()), 2)
 
     def test_save_updates_known_to_batch(self):
         task = self.factory.create_from('home', map={'status':'needsAction'})

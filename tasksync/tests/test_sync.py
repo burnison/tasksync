@@ -1,4 +1,4 @@
-# Copyright (C) 2012 Richard Burnison
+# Copyright (C) 2012-2018 Richard Burnison
 #
 # This file is part of tasksync.
 #
@@ -17,43 +17,49 @@
 
 #pylint: disable=C0103,C0111,I0011,I0012,W0704,W0142,W0212,W0232,W0613,W0702
 #pylint: disable=R0201,W0614,R0914,R0912,R0915,R0913,R0904,R0801,W0201,R0902
-import tasksync
+from .mocks import MockUpstreamTask, MockDownstreamTask
 
-from mocks import MockUpstreamTask, MockDownstreamTask
 from mockito import mock, when, verify, verifyZeroInteractions, any
-from nose.tools import raises, eq_, ok_
+from tasksync.task import TaskFactory, TaskRepository
+from tasksync.sync import sync_all
+
+import unittest
 
 
-class TestSync(object):
-    def setup(self):
+class TestSync(unittest.TestCase):
+    def setUp(self):
         self.upstream = []
         self.downstream = []
         for _ in range(0, 5):
             self.upstream.append(MockUpstreamTask(subject='a',provider='g',uid='a'))
             self.downstream.append(MockDownstreamTask(subject='b'))
 
-        self.upstream_factory = mock(tasksync.TaskFactory)
-        self.downstream_factory = mock(tasksync.TaskFactory)
-        self.upstream_repo = mock(tasksync.TaskRepository)
-        self.downstream_repo = mock(tasksync.TaskRepository)
+        self.upstream_factory = mock(TaskFactory, strict=False)
+        self.downstream_factory = mock(TaskFactory, strict=False)
+
+        self.downstream_repo = mock(TaskRepository, strict=False)
+        self.upstream_repo = mock(TaskRepository, strict=False)
+
         self.execution = {
             'upstream':{
                 'repository':self.upstream_repo,
                 'factory':self.upstream_factory,
                 'delete_orphans':False,
                 'filter':lambda d, u: True,
-                'cb':None,},
+                'cb':None,
+            },
             'downstream':{
                 'repository':self.downstream_repo,
                 'factory':self.downstream_factory,
                 'delete_orphans':False,
                 'filter':lambda u, d: True,
-                'cb':None,}
+                'cb':None,
+            }
         };
 
     def _do_sync_all(self):
         """ Clean up the call. """
-        tasksync.sync_all(self.execution)
+        sync_all(self.execution)
 
     def test_no_tasks(self):
         when(self.downstream_repo).all().thenReturn([])
@@ -61,8 +67,8 @@ class TestSync(object):
 
         self._do_sync_all()
 
-        verify(self.downstream_repo, 0).save(any(), any(), any(), any())
-        verify(self.upstream_repo, 0).save(any(), any(), any(), any())
+        verify(self.downstream_repo, 0).save()
+        verify(self.upstream_repo, 0).save()
 
     def test_unknown_from_downstream(self):
         d = self.downstream[0]

@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
         name='tasksync',
-        version='1.0.0',
+        version='1.0.1',
         description='Syncs task repositories.',
 
         author='Richard Burnison',
@@ -10,24 +10,21 @@ setup(
         url='http://www.burnison.ca/',
 
         packages=find_packages(),
+
         include_package_data=True,
         zip_safe=False,
 
-        test_suite='nose.collector',
-
         install_requires=[
-            'google-api-python-client>=1.0',
-            'httplib2>=0.8',
-            'taskw==0.5.1'],
-
-        dependency_links = [
-            'https://github.com/burnison/taskw/tarball/completed_task_inclusion#egg=taskw-0.5.1'],
+            'google-api-python-client>=1.6.5',
+            'httplib2>=0.10.3',
+            'taskw==1.2.0',
+        ],
 
         tests_require=[
-            'nose>=1.0',
-            'mockito>=0.5'],
+            'mockito<=0.6.0',
+        ],
 
         entry_points={
-            'console_scripts':['tasksync = tasksync.sync:main']
+            'console_scripts':['tasksync = tasksync.main:main']
         }
 )

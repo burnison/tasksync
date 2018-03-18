@@ -1,4 +1,4 @@
-# Copyright (C) 2012 Richard Burnison
+# Copyright (C) 2012-2018 Richard Burnison
 #
 # This file is part of tasksync.
 #
@@ -14,17 +14,15 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with tasksync.  If not, see <http://www.gnu.org/licenses/>.
-
-""" Realization of TaskWarrior tasks. """
-import taskw
-import logging
-import tasksync
+from tasksync.task import Task, DownstreamTask, TaskFactory, TaskRepository
 
 from datetime import datetime
+from taskw import TaskWarrior
 
+import logging
 logger = logging.getLogger(__name__)
 
-class TaskWarriorTask(tasksync.Task, tasksync.DownstreamTask):
+class TaskWarriorTask(Task, DownstreamTask):
     """ Represents a TaskWarrior task. """
     __UDA_NAMESPACE = "tasksync"
     __UDA_ASSOCIATION = "%s_assoc" % __UDA_NAMESPACE
@@ -43,7 +41,7 @@ class TaskWarriorTask(tasksync.Task, tasksync.DownstreamTask):
         if not TaskWarriorTask.__UDA_ETAG in self._source:
             # Is local only. Couldn't possibly be upstream.
             return False
-        return self._source[TaskWarriorTask.__UDA_ETAG] != other.etag
+        return self._source[TaskWarriorTask.__UDA_ETAG].replace('&dquot;', '"') != other.etag
 
     def copy_from(self, other):
         if other is None:
@@ -73,13 +71,7 @@ class TaskWarriorTask(tasksync.Task, tasksync.DownstreamTask):
             return True
 
     def should_sync_with(self, other):
-        if self.is_completed and other.is_pending:
-            # The task was marked done then reopened upstream. Effectively,
-            # the task was reopened. This isn't supported (for now).
-            logger.warning("Reopening of %s is not supported.", self)
-            return False
-        else:
-            return True
+        return True
 
     @property
     def is_recurring(self):
@@ -151,7 +143,10 @@ class TaskWarriorTask(tasksync.Task, tasksync.DownstreamTask):
     def __parse_date(self, as_string):
         if as_string is None:
             return None
-        return datetime.fromtimestamp(int(as_string))
+        if as_string.isdigit():
+            return datetime.fromtimestamp(int(as_string))
+        else:
+            return datetime.strptime(as_string, '%Y%m%dT%H%M%SZ')
 
     def __format_date(self, as_timestamp):
         return datetime.strftime(as_timestamp, '%s')
@@ -165,7 +160,7 @@ class TaskWarriorTask(tasksync.Task, tasksync.DownstreamTask):
                 value = fmt(value)
             self._source[key] = value
 
-class TaskWarriorTaskFactory(tasksync.TaskFactory):
+class TaskWarriorTaskFactory(TaskFactory):
     def create_from(self, **kwargs):
         """ Create a new task from another task, 'other', or a map, 'map'. """
         if 'map' in kwargs:
@@ -178,9 +173,9 @@ class TaskWarriorTaskFactory(tasksync.TaskFactory):
 
         raise KeyError('Either a map or task argument must be provided.')
 
-class TaskWarriorTaskRepository(tasksync.TaskRepository):
+class TaskWarriorTaskRepository(TaskRepository):
     def __init__(self, factory, db=None, **kwargs):
-        self._db = db or taskw.TaskWarrior(config_filename=kwargs['config'])
+        self._db = db or TaskWarrior(config_filename=kwargs['config'])
         self._factory = factory
 
     def all(self):
@@ -210,10 +205,7 @@ class TaskWarriorTaskRepository(tasksync.TaskRepository):
         # Task completion is a special case.
         if task.is_pending and not task.completed is None:
             logger.info("Marking %s as complete.", task)
-            keys = {k:task._source[k]
-                    for k in task._source.keys()
-                    if k == 'uuid' or k == 'end'}
-            task._source = self._db.task_done(**keys)
+            task._source = self._db.task_done(uuid=task._source['uuid'])
 
         if not cb is None:
             cb(task, userdata)
@@ -222,6 +214,7 @@ class TaskWarriorTaskRepository(tasksync.TaskRepository):
         batch['delete'].append((task._source, cb, userdata))
 
     def save(self, task, batch, cb, userdata):
+        pass
         if task.uid is None:
             batch['create'].append((task._source, cb, userdata))
         else:

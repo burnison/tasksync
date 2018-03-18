@@ -1,4 +1,4 @@
-# Copyright (C) 2012 Richard Burnison
+# Copyright (C) 2012-2018 Richard Burnison
 #
 # This file is part of tasksync.
 #
@@ -17,9 +17,11 @@
 
 #pylint: disable=C0103,C0111,I0011,I0012,W0704,W0142,W0212,W0232,W0613,W0702
 #pylint: disable=R0201,W0614,R0914,R0912,R0915,R0913,R0904,R0801,W0201,R0902
-import tasksync
+from tasksync.task import Task, DownstreamTask, UpstreamTask
 
-class MockTask(tasksync.Task):
+import copy
+
+class MockTask(Task):
     def __init__(self, **kwargs):
         self._uid = kwargs.get('uid', None)
         self._status = kwargs.get('status', None)
@@ -28,6 +30,19 @@ class MockTask(tasksync.Task):
         self._due = kwargs.get('due', None)
         self._provider = kwargs.get('provider', None)
         self._etag = kwargs.get('etag', None)
+
+    def as_dict(self):
+        d = {
+            'uid': self._uid,
+            'status': self._status,
+            'subject': self._subject,
+            'completed': self._completed,
+            'due': self._due,
+            'provider': self._provider,
+            'etag': self._etag,
+        }
+        return { k:v for k,v in d.items() if v is not None }
+
 
     def should_sync(self):
         return True
@@ -60,9 +75,9 @@ class MockTask(tasksync.Task):
         return self._due
 
     def copy_from(self, other):
-        pass
+        return copy.copy(self)
 
-class MockDownstreamTask(MockTask, tasksync.DownstreamTask):
+class MockDownstreamTask(MockTask, DownstreamTask):
     def __init__(self, **kwargs):
         super(MockDownstreamTask, self).__init__()
         self.upstream = kwargs.get('upstream', None)
@@ -85,7 +100,7 @@ class MockDownstreamTask(MockTask, tasksync.DownstreamTask):
     def stale(self, other):
         return self._etag != other._etag
 
-class MockUpstreamTask(MockTask, tasksync.UpstreamTask):
+class MockUpstreamTask(MockTask, UpstreamTask):
     def __init__(self, **kwargs):
         super(MockUpstreamTask, self).__init__(**kwargs)
         self._provider = kwargs.get('provider', None)

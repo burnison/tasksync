@@ -1,4 +1,4 @@
-# Copyright (C) 2012 Richard Burnison
+# Copyright (C) 2012-2018 Richard Burnison
 #
 # This file is part of tasksync.
 #
@@ -16,10 +16,10 @@
 # along with tasksync.  If not, see <http://www.gnu.org/licenses/>.
 
 #pylint: disable=C0111
+from tasksync.task import DownstreamTask
+
 import sys
 import logging
-import tasksync
-
 logger = logging.getLogger(__name__)
 
 def sync_all(execution):
@@ -52,7 +52,7 @@ def sync_all(execution):
                     upstream_q.append((dtask, utask))
 
     # The remaining tasks in the downstream task list are not known upstream.
-    # It's possible that a task is being excluded from syncronization. Check it.
+    # It's possible that a task is being excluded from synchronization. Check it.
     for dtask in dtasks:
         if not dtask.should_sync():
             continue
@@ -83,7 +83,7 @@ def __sync_task(source, source_batch, source_task, dest, dest_batch, dest_task):
         task_cb(source_task, dest_task)
 
     def task_created(dest_task, source_task):
-        if not isinstance(source_task, tasksync.DownstreamTask):
+        if not isinstance(source_task, DownstreamTask):
             # A sync is only required when the source is a downstream task.
             return
         logger.info("Successfully synced %s->%s.", source_task, dest_task)
@@ -125,14 +125,3 @@ def __sync_tasks(source, dest, queue):
 
     dest['repository'].batch_close(dest_batch)
     source['repository'].batch_close(source_batch)
-
-def main():
-    """ Main method. """
-    logging.basicConfig(level=logging.INFO)
-
-    for execution in tasksync.config.executions:
-        logger.info("Running - %s.", execution)
-        sync_all(tasksync.config.executions[execution])
-
-if __name__ == "__main__":
-    main()
