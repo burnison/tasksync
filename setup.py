@@ -18,6 +18,7 @@ setup(
             'google-api-python-client>=1.6.5',
             'httplib2>=0.10.3',
             'taskw==1.2.0',
+            'oauth2client==4.1.3',
         ],
 
         tests_require=[
